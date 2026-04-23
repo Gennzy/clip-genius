@@ -48,6 +48,18 @@ def _run_yt_dlp(args: list[str]) -> subprocess.CompletedProcess:
 
 
 _BOT_CHECK_RE = re.compile(r"sign in to confirm|confirm.+not a bot", re.IGNORECASE)
+_BAD_URL_RE = re.compile(
+    r"unsupported url scheme|is not a valid url|no video could be found", re.IGNORECASE
+)
+_VALID_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+
+def _not_a_url_message() -> str:
+    return (
+        "That doesn't look like a valid URL. Paste a full link starting with "
+        "http:// or https:// (YouTube, Twitch VOD, direct MP4, …) or switch to "
+        "the Upload file tab."
+    )
 
 
 def _friendly_ytdlp_error(stderr: str) -> str:
@@ -64,6 +76,8 @@ def _friendly_ytdlp_error(stderr: str) -> str:
             "env var to a Netscape cookies.txt exported from a signed-in browser "
             "(see README → Troubleshooting)."
         )
+    if _BAD_URL_RE.search(short):
+        return _not_a_url_message()
     return f"yt-dlp: {short.removeprefix('ERROR: ').strip()}"
 
 
@@ -86,6 +100,8 @@ def probe_duration(path: Path) -> float:
 
 def download_url(url: str, workdir: Path) -> tuple[Path, str]:
     """Download a video from a URL using yt-dlp. Returns (path, title)."""
+    if not _VALID_URL_RE.match(url.strip()):
+        raise YtDlpError(_not_a_url_message())
     out_tpl = str(workdir / "source.%(ext)s")
     proc = _run_yt_dlp(
         [

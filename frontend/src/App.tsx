@@ -57,6 +57,15 @@ export default function App() {
     e.preventDefault();
     setError(null);
     setJob(null);
+    if (mode === "url") {
+      const trimmed = url.trim();
+      if (!/^https?:\/\//i.test(trimmed)) {
+        setError(
+          "Paste a full URL starting with http:// or https:// — or switch to the Upload file tab.",
+        );
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const resp = await createJob({
