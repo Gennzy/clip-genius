@@ -14,7 +14,7 @@ from .config import (
     WATERMARK_TEXT,
 )
 from .highlights import select_highlights
-from .ingest import ingest
+from .ingest import YtDlpError, ingest
 from .jobs import Job, update
 from .models import ClipInfo
 from .transcribe import transcribe
@@ -102,6 +102,15 @@ def run_pipeline(
             message=f"Done — {len(clips)} clips ready",
             clips=clips,
         )
+    except YtDlpError as exc:
+        log.warning("yt-dlp failed for job %s: %s", job.id, exc)
+        update(
+            job,
+            status="failed",
+            error=str(exc),
+            message="Could not download source video",
+        )
+        (job.workdir / "error.log").write_text(traceback.format_exc(), encoding="utf-8")
     except Exception as exc:  # noqa: BLE001
         log.exception("Pipeline failed for job %s", job.id)
         update(

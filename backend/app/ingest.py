@@ -2,10 +2,17 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+from .config import (
+    YT_DLP_COOKIES_FILE,
+    YT_DLP_COOKIES_FROM_BROWSER,
+    YT_DLP_EXTRACTOR_ARGS,
+)
 
 
 @dataclass
@@ -16,8 +23,48 @@ class SourceMedia:
     title: str
 
 
+class YtDlpError(RuntimeError):
+    """yt-dlp failed in a way we can surface to the end user."""
+
+
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+
+def _run_yt_dlp(args: list[str]) -> subprocess.CompletedProcess:
+    """Run yt-dlp with our shared auth/extractor flags, raising YtDlpError on failure."""
+    base = ["yt-dlp", "--no-playlist", "--restrict-filenames", "--retries", "3"]
+    if YT_DLP_EXTRACTOR_ARGS:
+        base += ["--extractor-args", YT_DLP_EXTRACTOR_ARGS]
+    if YT_DLP_COOKIES_FILE:
+        base += ["--cookies", YT_DLP_COOKIES_FILE]
+    if YT_DLP_COOKIES_FROM_BROWSER:
+        base += ["--cookies-from-browser", YT_DLP_COOKIES_FROM_BROWSER]
+
+    proc = subprocess.run(base + args, check=False, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise YtDlpError(_friendly_ytdlp_error(proc.stderr))
+    return proc
+
+
+_BOT_CHECK_RE = re.compile(r"sign in to confirm|confirm.+not a bot", re.IGNORECASE)
+
+
+def _friendly_ytdlp_error(stderr: str) -> str:
+    """Collapse yt-dlp stderr into something we can show in the UI."""
+    lines = [ln for ln in (stderr or "").splitlines() if ln.strip()]
+    # Find the last `ERROR:` line yt-dlp emitted.
+    last_error = next((ln for ln in reversed(lines) if ln.lstrip().startswith("ERROR")), "")
+    short = last_error or (lines[-1] if lines else "yt-dlp exited with non-zero status")
+
+    if _BOT_CHECK_RE.search(short):
+        return (
+            "YouTube is blocking the download with a bot check. "
+            "Upload the file directly, or set the CLIPGENIUS_YT_DLP_COOKIES_FILE "
+            "env var to a Netscape cookies.txt exported from a signed-in browser "
+            "(see README → Troubleshooting)."
+        )
+    return f"yt-dlp: {short.removeprefix('ERROR: ').strip()}"
 
 
 def probe_duration(path: Path) -> float:
@@ -40,16 +87,12 @@ def probe_duration(path: Path) -> float:
 def download_url(url: str, workdir: Path) -> tuple[Path, str]:
     """Download a video from a URL using yt-dlp. Returns (path, title)."""
     out_tpl = str(workdir / "source.%(ext)s")
-    # Prefer mp4/m4a if available; otherwise let yt-dlp pick the best.
-    _run(
+    proc = _run_yt_dlp(
         [
-            "yt-dlp",
             "-f",
             "bv*+ba/b",
             "--merge-output-format",
             "mp4",
-            "--no-playlist",
-            "--restrict-filenames",
             "-o",
             out_tpl,
             "--print-json",
@@ -60,15 +103,19 @@ def download_url(url: str, workdir: Path) -> tuple[Path, str]:
     )
     candidates = sorted(workdir.glob("source.*"))
     if not candidates:
-        raise RuntimeError("yt-dlp finished but produced no file")
+        raise YtDlpError("yt-dlp finished but produced no file")
     video = candidates[0]
-    # Grab metadata via a separate --print-json pass (it was printed above but we re-probe for simplicity).
-    try:
-        meta_res = _run(["yt-dlp", "-J", "--no-playlist", url])
-        meta = json.loads(meta_res.stdout)
-        title = meta.get("title") or video.stem
-    except Exception:
-        title = video.stem
+    # `--print-json` printed metadata to stdout; parse the last JSON object
+    # (there's usually exactly one, but we defend against warnings above it).
+    title = video.stem
+    for line in reversed(proc.stdout.splitlines()):
+        line = line.strip()
+        if line.startswith("{") and line.endswith("}"):
+            try:
+                title = json.loads(line).get("title") or title
+                break
+            except json.JSONDecodeError:
+                continue
     return video, title
 
 
