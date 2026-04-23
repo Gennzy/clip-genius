@@ -29,3 +29,19 @@ CORS_ORIGINS = os.environ.get(
     "CLIPGENIUS_CORS_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173",
 ).split(",")
+
+# yt-dlp authentication for sites that gate downloads behind a login
+# (e.g. YouTube's "Sign in to confirm you're not a bot" challenge).
+# Point this at a Netscape-format cookies.txt exported from a logged-in browser.
+YT_DLP_COOKIES_FILE = os.environ.get("CLIPGENIUS_YT_DLP_COOKIES_FILE") or None
+# Alternative: pull cookies directly from an installed browser profile.
+# Format: "<browser>" or "<browser>:<profile_dir>" (e.g. "chrome", "firefox:default",
+# "chrome:/home/me/.config/google-chrome").
+YT_DLP_COOKIES_FROM_BROWSER = os.environ.get("CLIPGENIUS_YT_DLP_COOKIES_FROM_BROWSER") or None
+# Extra extractor-args (passed verbatim to yt-dlp `--extractor-args`).
+# Default rotates through a handful of YouTube player clients, which survives
+# most region / bot checks even without cookies.
+YT_DLP_EXTRACTOR_ARGS = os.environ.get(
+    "CLIPGENIUS_YT_DLP_EXTRACTOR_ARGS",
+    "youtube:player_client=default,tv_simply,web_safari;formats=missing_pot",
+)

@@ -95,6 +95,9 @@ The first request downloads the `faster-whisper base` model (~140 MB) into
 | `CLIPGENIUS_MIN_CLIP` / `_MAX_CLIP` / `_TARGET_CLIP` | `20` / `55` / `35` | Clip duration bounds (seconds) |
 | `CLIPGENIUS_WATERMARK`          | `Clip Genius`      | Watermark text                          |
 | `CLIPGENIUS_CORS_ORIGINS`       | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated |
+| `CLIPGENIUS_YT_DLP_COOKIES_FILE` | _(unset)_          | Path to a Netscape-format `cookies.txt` for yt-dlp (see Troubleshooting) |
+| `CLIPGENIUS_YT_DLP_COOKIES_FROM_BROWSER` | _(unset)_  | Alternative: `chrome`, `firefox:default`, `chrome:/path/to/profile`, … |
+| `CLIPGENIUS_YT_DLP_EXTRACTOR_ARGS` | `youtube:player_client=default,tv_simply,web_safari;formats=missing_pot` | Passed to `yt-dlp --extractor-args` |
 
 ## Running the frontend
 
@@ -126,6 +129,42 @@ curl -F 'url=https://www.youtube.com/watch?v=dQw4w9WgXcQ' \
 
 curl http://localhost:8000/jobs/a1b2c3d4e5f6
 ```
+
+## Troubleshooting
+
+### YouTube: "Sign in to confirm you're not a bot"
+
+YouTube periodically blocks unauthenticated `yt-dlp` downloads. You have three
+options:
+
+1. **Upload the file instead** — the upload tab bypasses `yt-dlp` entirely.
+2. **Pass cookies from a signed-in browser (recommended):**
+
+   ```bash
+   # Export cookies.txt from a logged-in Chrome/Firefox session
+   # (e.g. the "Get cookies.txt LOCALLY" extension, or Firefox's
+   # built-in "Cookie Editor → Export") and point the backend at it:
+   export CLIPGENIUS_YT_DLP_COOKIES_FILE=/path/to/cookies.txt
+   uvicorn app.main:app --reload --port 8000
+   ```
+
+3. **Use a local browser profile directly:**
+
+   ```bash
+   export CLIPGENIUS_YT_DLP_COOKIES_FROM_BROWSER=chrome
+   # or: firefox:default, chrome:/home/me/.config/google-chrome
+   ```
+
+The UI will show a friendly error message instead of a Python traceback when a
+download fails for this reason.
+
+### Clip count capped below the slider
+
+The highlight selector enforces a minimum clip duration (`CLIPGENIUS_MIN_CLIP`,
+default 20 s) and suppresses overlapping picks. For a short source the number
+of *physically possible* non-overlapping clips is the cap. Example: a 90 s
+video at 20 s minimum + 8 s NMS gap yields at most 2 clips regardless of the
+slider value. Use a longer source to see more clips.
 
 ## Roadmap (paid tier hooks)
 
