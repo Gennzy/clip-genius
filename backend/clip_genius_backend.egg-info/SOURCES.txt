@@ -1,0 +1,16 @@
+pyproject.toml
+app/__init__.py
+app/clipper.py
+app/config.py
+app/highlights.py
+app/ingest.py
+app/jobs.py
+app/main.py
+app/models.py
+app/pipeline.py
+app/transcribe.py
+clip_genius_backend.egg-info/PKG-INFO
+clip_genius_backend.egg-info/SOURCES.txt
+clip_genius_backend.egg-info/dependency_links.txt
+clip_genius_backend.egg-info/requires.txt
+clip_genius_backend.egg-info/top_level.txt
